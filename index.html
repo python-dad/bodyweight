@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BodyTracker - Körpergewicht & Körperfett Tracking</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">
+                <i class="fas fa-weight-scale"></i>
+                <h1>BodyTracker</h1>
+            </div>
+            <nav class="main-nav">
+                <button class="nav-btn active" data-view="dashboard">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Dashboard</span>
+                </button>
+                <button class="nav-btn" data-view="entry">
+                    <i class="fas fa-plus-circle"></i>
+                    <span>Neue Messung</span>
+                </button>
+                <button class="nav-btn" data-view="history">
+                    <i class="fas fa-history"></i>
+                    <span>Verlauf</span>
+                </button>
+                <button class="nav-btn" data-view="settings">
+                    <i class="fas fa-cog"></i>
+                    <span>Einstellungen</span>
+                </button>
+            </nav>
+            <button class="theme-toggle" id="themeToggle" aria-label="Theme wechseln">
+                <i class="fas fa-moon"></i>
+            </button>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard View -->
+            <section id="dashboard" class="view active">
+                <div class="dashboard-header">
+                    <h2>Dashboard</h2>
+                    <div class="time-filter">
+                        <button class="filter-btn active" data-range="week">Woche</button>
+                        <button class="filter-btn" data-range="month">Monat</button>
+                        <button class="filter-btn" data-range="year">Jahr</button>
+                        <button class="filter-btn" data-range="all">Alle</button>
+                    </div>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon weight">
+                            <i class="fas fa-weight-scale"></i>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-label">Aktuelles Gewicht</span>
+                            <span class="stat-value" id="currentWeight">-- kg</span>
+                            <span class="stat-change" id="weightChange">--</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon bodyfat">
+                            <i class="fas fa-percent"></i>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-label">Körperfett</span>
+                            <span class="stat-value" id="currentBodyFat">-- %</span>
+                            <span class="stat-change" id="bodyFatChange">--</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon trend">
+                            <i class="fas fa-arrow-trend-down"></i>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-label">Gewichtsveränderung</span>
+                            <span class="stat-value" id="totalWeightChange">-- kg</span>
+                            <span class="stat-change" id="periodLabel">im Zeitraum</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon entries">
+                            <i class="fas fa-calendar-check"></i>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-label">Messungen</span>
+                            <span class="stat-value" id="totalEntries">0</span>
+                            <span class="stat-change" id="lastEntryDate">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts -->
+                <div class="charts-container">
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>Gewichtsverlauf</h3>
+                        </div>
+                        <div class="chart-wrapper">
+                            <canvas id="weightChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>Körperfett-Verlauf</h3>
+                        </div>
+                        <div class="chart-wrapper">
+                            <canvas id="bodyFatChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card full-width">
+                        <div class="chart-header">
+                            <h3>Vergleichsdarstellung</h3>
+                        </div>
+                        <div class="chart-wrapper">
+                            <canvas id="combinedChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Entries -->
+                <div class="recent-entries">
+                    <h3>Letzte Messungen</h3>
+                    <div class="entries-list" id="recentEntriesList">
+                        <!-- Entries will be populated by JavaScript -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Entry View -->
+            <section id="entry" class="view">
+                <h2>Neue Messung hinzufügen</h2>
+                <form id="entryForm" class="entry-form">
+                    <div class="form-group">
+                        <label for="measureDate">
+                            <i class="fas fa-calendar"></i>
+                            Datum & Uhrzeit
+                        </label>
+                        <input type="datetime-local" id="measureDate" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="weight">
+                            <i class="fas fa-weight-scale"></i>
+                            Körpergewicht (kg)
+                        </label>
+                        <input type="number" id="weight" step="0.1" min="20" max="300" placeholder="z.B. 75.5" required>
+                        <span class="input-hint">Wert zwischen 20 und 300 kg</span>
+                    </div>
+
+                    <!-- Caliper Section -->
+                    <div class="caliper-section">
+                        <div class="caliper-header">
+                            <h3>
+                                <i class="fas fa-ruler"></i>
+                                Körperfettmessung (Jackson/Pollock 3-Falten-Methode)
+                                <button type="button" class="help-btn" id="caliperHelp" aria-label="Hilfe zur Fat Caliper Methode">
+                                    <i class="fas fa-question-circle"></i>
+                                </button>
+                            </h3>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="useCaliperToggle">
+                                <span class="toggle-slider"></span>
+                                <span class="toggle-label">Caliper-Messung verwenden</span>
+                            </label>
+                        </div>
+
+                        <div class="caliper-fields" id="caliperFields" style="display: none;">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="gender">
+                                        <i class="fas fa-venus-mars"></i>
+                                        Geschlecht
+                                    </label>
+                                    <select id="gender">
+                                        <option value="">Bitte wählen...</option>
+                                        <option value="male">Männlich</option>
+                                        <option value="female">Weiblich</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="age">
+                                        <i class="fas fa-birthday-cake"></i>
+                                        Alter (Jahre)
+                                    </label>
+                                    <input type="number" id="age" min="10" max="100" placeholder="z.B. 30">
+                                </div>
+                            </div>
+
+                            <!-- Body Measurement Illustration -->
+                            <div class="measurement-illustration" id="measurementIllustration" style="display: none;">
+                                <div class="illustration-container">
+                                    <img src="assets/illustration.jpg" alt="Messpunkte für die Jackson/Pollock Methode" class="measurement-image">
+                                    <p class="illustration-caption">
+                                        <i class="fas fa-info-circle"></i>
+                                        Messpunkte: Frauen (links) | Männer (rechts)
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Male Skinfold Fields -->
+                            <div class="skinfold-fields male-fields" id="maleFields" style="display: none;">
+                                <p class="skinfold-info"><i class="fas fa-info-circle"></i> Messpunkte für Männer: Brust, Bauch, Oberschenkel</p>
+                                <div class="form-row form-row-3">
+                                    <div class="form-group">
+                                        <label for="skinfoldChest">
+                                            Brust (mm)
+                                        </label>
+                                        <input type="number" id="skinfoldChest" step="0.5" min="1" max="100" placeholder="z.B. 12">
+                                        <span class="input-hint">Diagonale Falte</span>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="skinfoldAbdomen">
+                                            Bauch (mm)
+                                        </label>
+                                        <input type="number" id="skinfoldAbdomen" step="0.5" min="1" max="100" placeholder="z.B. 20">
+                                        <span class="input-hint">Vertikale Falte</span>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="skinfoldThighMale">
+                                            Oberschenkel (mm)
+                                        </label>
+                                        <input type="number" id="skinfoldThighMale" step="0.5" min="1" max="100" placeholder="z.B. 15">
+                                        <span class="input-hint">Vertikale Falte</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Female Skinfold Fields -->
+                            <div class="skinfold-fields female-fields" id="femaleFields" style="display: none;">
+                                <p class="skinfold-info"><i class="fas fa-info-circle"></i> Messpunkte für Frauen: Trizeps, Hüfte (Suprailiac), Oberschenkel</p>
+                                <div class="form-row form-row-3">
+                                    <div class="form-group">
+                                        <label for="skinfoldTriceps">
+                                            Trizeps (mm)
+                                        </label>
+                                        <input type="number" id="skinfoldTriceps" step="0.5" min="1" max="100" placeholder="z.B. 18">
+                                        <span class="input-hint">Vertikale Falte</span>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="skinfoldSuprailiac">
+                                            Hüfte (mm)
+                                        </label>
+                                        <input type="number" id="skinfoldSuprailiac" step="0.5" min="1" max="100" placeholder="z.B. 15">
+                                        <span class="input-hint">Diagonale Falte</span>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="skinfoldThighFemale">
+                                            Oberschenkel (mm)
+                                        </label>
+                                        <input type="number" id="skinfoldThighFemale" step="0.5" min="1" max="100" placeholder="z.B. 22">
+                                        <span class="input-hint">Vertikale Falte</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Calculated Body Fat Display -->
+                            <div class="calculated-bodyfat" id="calculatedBodyFat" style="display: none;">
+                                <div class="result-box">
+                                    <span class="result-label">Berechneter Körperfettanteil:</span>
+                                    <span class="result-value" id="calculatedValue">-- %</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Manual Body Fat Input (shown when caliper is disabled) -->
+                        <div class="manual-bodyfat" id="manualBodyFat">
+                            <div class="form-group">
+                                <label for="bodyFat">
+                                    <i class="fas fa-percent"></i>
+                                    Körperfett (%) - Manuelle Eingabe
+                                </label>
+                                <input type="number" id="bodyFat" step="0.1" min="3" max="60" placeholder="z.B. 15.2">
+                                <span class="input-hint">Wert zwischen 3 und 60 % (optional)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="notes">
+                            <i class="fas fa-sticky-note"></i>
+                            Notizen (optional)
+                        </label>
+                        <textarea id="notes" rows="3" placeholder="z.B. Nüchtern gemessen, nach dem Training..."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <i class="fas fa-camera"></i>
+                            Fotos (optional)
+                        </label>
+                        <div class="image-upload-area" id="imageUploadArea">
+                            <input type="file" id="imageInput" accept="image/jpeg,image/png,image/heic" multiple hidden>
+                            <div class="upload-placeholder">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <p>Bilder hierher ziehen oder klicken zum Auswählen</p>
+                                <span>JPG, PNG, HEIC - Max. 5 Bilder</span>
+                            </div>
+                            <div class="image-preview" id="imagePreview"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="clearForm">
+                            <i class="fas fa-times"></i>
+                            Zurücksetzen
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i>
+                            Speichern
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- History View -->
+            <section id="history" class="view">
+                <div class="history-header">
+                    <h2>Messverlauf</h2>
+                    <div class="history-actions">
+                        <div class="search-box">
+                            <i class="fas fa-search"></i>
+                            <input type="text" id="searchInput" placeholder="Suchen...">
+                        </div>
+                        <div class="filter-controls">
+                            <input type="date" id="filterDateFrom" placeholder="Von">
+                            <input type="date" id="filterDateTo" placeholder="Bis">
+                            <button class="btn btn-secondary" id="applyFilter">
+                                <i class="fas fa-filter"></i>
+                                Filtern
+                            </button>
+                            <button class="btn btn-secondary" id="clearFilter">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="history-table-container">
+                    <table class="history-table" id="historyTable">
+                        <thead>
+                            <tr>
+                                <th>Datum</th>
+                                <th>Gewicht</th>
+                                <th>Körperfett</th>
+                                <th>Notizen</th>
+                                <th>Bilder</th>
+                                <th>Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody">
+                            <!-- Entries will be populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination" id="pagination">
+                    <!-- Pagination will be populated by JavaScript -->
+                </div>
+            </section>
+
+            <!-- Settings View -->
+            <section id="settings" class="view">
+                <h2>Einstellungen</h2>
+
+                <div class="settings-section">
+                    <h3><i class="fas fa-bullseye"></i> Ziele</h3>
+                    <div class="settings-group">
+                        <div class="form-group">
+                            <label for="goalWeight">Zielgewicht (kg)</label>
+                            <input type="number" id="goalWeight" step="0.1" min="30" max="200" placeholder="z.B. 70.0">
+                        </div>
+                        <div class="form-group">
+                            <label for="goalBodyFat">Ziel-Körperfett (%)</label>
+                            <input type="number" id="goalBodyFat" step="0.1" min="5" max="40" placeholder="z.B. 12.0">
+                        </div>
+                        <button class="btn btn-primary" id="saveGoals">
+                            <i class="fas fa-save"></i>
+                            Ziele speichern
+                        </button>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3><i class="fas fa-database"></i> Datenmanagement</h3>
+                    <div class="settings-group">
+                        <button class="btn btn-secondary" id="exportJSON">
+                            <i class="fas fa-download"></i>
+                            JSON Export
+                        </button>
+                        <button class="btn btn-secondary" id="exportCSV">
+                            <i class="fas fa-file-csv"></i>
+                            CSV Export
+                        </button>
+                        <button class="btn btn-secondary" id="exportPDF">
+                            <i class="fas fa-file-pdf"></i>
+                            PDF Export
+                        </button>
+                        <label class="btn btn-secondary">
+                            <i class="fas fa-upload"></i>
+                            Import
+                            <input type="file" id="importFile" accept=".json" hidden>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-section danger-zone">
+                    <h3><i class="fas fa-exclamation-triangle"></i> Gefahrenzone</h3>
+                    <div class="settings-group">
+                        <button class="btn btn-danger" id="deleteAllData">
+                            <i class="fas fa-trash-alt"></i>
+                            Alle Daten löschen
+                        </button>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3><i class="fas fa-info-circle"></i> Über die App</h3>
+                    <div class="about-info">
+                        <p><strong>BodyTracker</strong> v1.0.0</p>
+                        <p>Eine lokale Anwendung zur Aufzeichnung und Visualisierung von Körpergewicht und Körperfettgehalt.</p>
+                        <p>Alle Daten werden ausschließlich lokal in Ihrem Browser gespeichert.</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Fat Caliper Help Modal -->
+        <div class="modal" id="caliperModal">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h3>Jackson/Pollock 3-Falten-Methode</h3>
+                    <button class="modal-close" id="closeCaliperModal">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <h4>Was ist die Jackson/Pollock Methode?</h4>
+                    <p>Die Jackson/Pollock 3-Falten-Methode ist eine wissenschaftlich validierte Methode zur Bestimmung des Körperfettanteils. Sie wurde 1978 von A.S. Jackson und M.L. Pollock entwickelt und basiert auf der Messung von drei Hautfalten mit einem Caliper (Hautfaltenmessgerät).</p>
+
+                    <div class="method-section">
+                        <h4><i class="fas fa-mars"></i> Messpunkte für Männer</h4>
+                        <div class="measurement-points">
+                            <div class="measurement-point">
+                                <div class="point-number">1</div>
+                                <div class="point-details">
+                                    <strong>Brust (Pectoralis)</strong>
+                                    <p>Diagonale Hautfalte auf halbem Weg zwischen der vorderen Achselfalte und der Brustwarze.</p>
+                                    <span class="point-direction">Faltenrichtung: diagonal (45°)</span>
+                                </div>
+                            </div>
+                            <div class="measurement-point">
+                                <div class="point-number">2</div>
+                                <div class="point-details">
+                                    <strong>Bauch (Abdomen)</strong>
+                                    <p>Vertikale Hautfalte ca. 2 cm seitlich vom Bauchnabel.</p>
+                                    <span class="point-direction">Faltenrichtung: vertikal</span>
+                                </div>
+                            </div>
+                            <div class="measurement-point">
+                                <div class="point-number">3</div>
+                                <div class="point-details">
+                                    <strong>Oberschenkel (Quadriceps)</strong>
+                                    <p>Vertikale Hautfalte auf der Vorderseite des Oberschenkels, mittig zwischen Knie und Hüfte.</p>
+                                    <span class="point-direction">Faltenrichtung: vertikal</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="method-section">
+                        <h4><i class="fas fa-venus"></i> Messpunkte für Frauen</h4>
+                        <div class="measurement-points">
+                            <div class="measurement-point">
+                                <div class="point-number">1</div>
+                                <div class="point-details">
+                                    <strong>Trizeps</strong>
+                                    <p>Vertikale Hautfalte auf der Rückseite des Oberarms, mittig zwischen Schulter und Ellbogen.</p>
+                                    <span class="point-direction">Faltenrichtung: vertikal</span>
+                                </div>
+                            </div>
+                            <div class="measurement-point">
+                                <div class="point-number">2</div>
+                                <div class="point-details">
+                                    <strong>Hüfte (Suprailiac)</strong>
+                                    <p>Diagonale Hautfalte direkt oberhalb des Hüftknochens (Beckenkamm), entlang der natürlichen Faltenlinie.</p>
+                                    <span class="point-direction">Faltenrichtung: diagonal (45°)</span>
+                                </div>
+                            </div>
+                            <div class="measurement-point">
+                                <div class="point-number">3</div>
+                                <div class="point-details">
+                                    <strong>Oberschenkel (Quadriceps)</strong>
+                                    <p>Vertikale Hautfalte auf der Vorderseite des Oberschenkels, mittig zwischen Knie und Hüfte.</p>
+                                    <span class="point-direction">Faltenrichtung: vertikal</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="method-section">
+                        <h4><i class="fas fa-clipboard-list"></i> Anleitung zur Messung</h4>
+                        <ol class="measurement-steps">
+                            <li>Greifen Sie die Hautfalte mit Daumen und Zeigefinger etwa 1 cm oberhalb der Messstelle.</li>
+                            <li>Ziehen Sie die Falte vom Muskel weg (nur Haut und Unterhautfettgewebe).</li>
+                            <li>Platzieren Sie den Caliper ca. 1 cm unterhalb Ihrer Finger.</li>
+                            <li>Lassen Sie den Caliper-Griff los und warten Sie 2-3 Sekunden.</li>
+                            <li>Lesen Sie den Wert ab (in Millimetern).</li>
+                            <li><strong>Wiederholen Sie jede Messung 3x</strong> und verwenden Sie den Durchschnitt.</li>
+                        </ol>
+                    </div>
+
+                    <div class="method-section">
+                        <h4><i class="fas fa-lightbulb"></i> Tipps für genaue Messungen</h4>
+                        <ul class="tips-list">
+                            <li>Messen Sie immer zur gleichen Tageszeit (idealerweise morgens)</li>
+                            <li>Messen Sie nüchtern oder 2-3 Stunden nach dem Essen</li>
+                            <li>Vermeiden Sie Messungen direkt nach dem Training</li>
+                            <li>Messen Sie immer auf der gleichen Körperseite (rechts empfohlen)</li>
+                            <li>Führen Sie die Messung bei Raumtemperatur durch</li>
+                            <li>Vermeiden Sie Messungen nach Sauna oder heißem Duschen</li>
+                        </ul>
+                    </div>
+
+                    <div class="formula-section">
+                        <h4><i class="fas fa-calculator"></i> Berechnungsformel</h4>
+                        <p>Die App verwendet die originalen Jackson/Pollock Formeln:</p>
+                        <div class="formula-box">
+                            <p><strong>Männer:</strong><br>
+                            Körperdichte = 1.10938 - (0.0008267 × S) + (0.0000016 × S²) - (0.0002574 × Alter)</p>
+                            <p><strong>Frauen:</strong><br>
+                            Körperdichte = 1.0994921 - (0.0009929 × S) + (0.0000023 × S²) - (0.0001392 × Alter)</p>
+                            <p class="formula-note">S = Summe der drei Hautfalten in mm</p>
+                            <p><strong>Körperfett (%) = (495 / Körperdichte) - 450</strong> (Siri-Gleichung)</p>
+                        </div>
+                    </div>
+
+                    <p class="accuracy-note"><i class="fas fa-info-circle"></i> <strong>Genauigkeit:</strong> Die Jackson/Pollock Methode hat eine Standardabweichung von etwa ±3.5% im Vergleich zu hydrostatischer Wägung. Für die Verfolgung von Trends über Zeit ist die Methode sehr zuverlässig, da relative Veränderungen genau erfasst werden.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Image Viewer Modal -->
+        <div class="modal" id="imageModal">
+            <div class="modal-content image-viewer">
+                <button class="modal-close" id="closeImageModal">
+                    <i class="fas fa-times"></i>
+                </button>
+                <div class="image-viewer-content">
+                    <button class="nav-arrow prev" id="prevImage">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <img id="modalImage" src="" alt="Bild">
+                    <button class="nav-arrow next" id="nextImage">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+                <div class="image-counter" id="imageCounter">1 / 1</div>
+            </div>
+        </div>
+
+        <!-- Edit Entry Modal -->
+        <div class="modal" id="editModal">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h3>Messung bearbeiten</h3>
+                    <button class="modal-close" id="closeEditModal">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="editForm">
+                        <input type="hidden" id="editId">
+                        <div class="form-group">
+                            <label for="editDate">Datum & Uhrzeit</label>
+                            <input type="datetime-local" id="editDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="editWeight">Gewicht (kg)</label>
+                            <input type="number" id="editWeight" step="0.1" min="20" max="300" required>
+                        </div>
+
+                        <div class="caliper-section edit-caliper">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="editUseCaliperToggle">
+                                <span class="toggle-slider"></span>
+                                <span class="toggle-label">Caliper-Messung bearbeiten</span>
+                            </label>
+
+                            <div class="edit-caliper-fields" id="editCaliperFields" style="display: none;">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="editGender">Geschlecht</label>
+                                        <select id="editGender">
+                                            <option value="">Bitte wählen...</option>
+                                            <option value="male">Männlich</option>
+                                            <option value="female">Weiblich</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="editAge">Alter (Jahre)</label>
+                                        <input type="number" id="editAge" min="10" max="100">
+                                    </div>
+                                </div>
+
+                                <div class="skinfold-fields edit-male-fields" id="editMaleFields" style="display: none;">
+                                    <div class="form-row form-row-3">
+                                        <div class="form-group">
+                                            <label for="editSkinfoldChest">Brust (mm)</label>
+                                            <input type="number" id="editSkinfoldChest" step="0.5" min="1" max="100">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="editSkinfoldAbdomen">Bauch (mm)</label>
+                                            <input type="number" id="editSkinfoldAbdomen" step="0.5" min="1" max="100">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="editSkinfoldThighMale">Oberschenkel (mm)</label>
+                                            <input type="number" id="editSkinfoldThighMale" step="0.5" min="1" max="100">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="skinfold-fields edit-female-fields" id="editFemaleFields" style="display: none;">
+                                    <div class="form-row form-row-3">
+                                        <div class="form-group">
+                                            <label for="editSkinfoldTriceps">Trizeps (mm)</label>
+                                            <input type="number" id="editSkinfoldTriceps" step="0.5" min="1" max="100">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="editSkinfoldSuprailiac">Hüfte (mm)</label>
+                                            <input type="number" id="editSkinfoldSuprailiac" step="0.5" min="1" max="100">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="editSkinfoldThighFemale">Oberschenkel (mm)</label>
+                                            <input type="number" id="editSkinfoldThighFemale" step="0.5" min="1" max="100">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="calculated-bodyfat" id="editCalculatedBodyFat" style="display: none;">
+                                    <div class="result-box">
+                                        <span class="result-label">Berechneter Körperfettanteil:</span>
+                                        <span class="result-value" id="editCalculatedValue">-- %</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="edit-manual-bodyfat" id="editManualBodyFat">
+                                <div class="form-group">
+                                    <label for="editBodyFat">Körperfett (%) - Manuell</label>
+                                    <input type="number" id="editBodyFat" step="0.1" min="3" max="60">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="editNotes">Notizen</label>
+                            <textarea id="editNotes" rows="3"></textarea>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary" id="cancelEdit">Abbrechen</button>
+                            <button type="submit" class="btn btn-primary">Speichern</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Confirm Delete Modal -->
+        <div class="modal" id="confirmModal">
+            <div class="modal-content confirm-dialog">
+                <div class="modal-header">
+                    <h3 id="confirmTitle">Bestätigung</h3>
+                </div>
+                <div class="modal-body">
+                    <p id="confirmMessage">Möchten Sie diesen Eintrag wirklich löschen?</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="confirmCancel">Abbrechen</button>
+                    <button class="btn btn-danger" id="confirmOk">Löschen</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Notifications -->
+        <div class="toast-container" id="toastContainer"></div>
+    </div>
+
+    <script src="js/storage.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
